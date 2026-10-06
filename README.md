@@ -1,6 +1,6 @@
 # Can Jev detect AI slop?
 
-*(Answer: Depends on what "slop" means. For AI-generated text, Jev is accurate on non-fiction and fails on creative prose. For writing quality, the answer is no: the scores reward machine style, not writing quality, and a rewrite can erase the slop score.)*
+*(Answer: Depends on what "slop" means. If task is "detect AI-generated text", Jev is accurate (AUC 0.87, n = 5,641) on non-fiction and fails on creative prose. For writing quality, the answer is no: the scores reward machine style, not writing quality, and a rewrite can erase the slop score.)*
 
 What we did: over three days (2026-09-22 → 24), TypeSafe's System One model (Jev, `jev-1.13.0`) received ≈20k requests. The requests measured four things: origin (human / AI / AI-edited), "slop" and writing quality, named writing faults, and whether edits move a judgment in one direction. Every judged property was stated in the request.
 
