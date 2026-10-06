@@ -49,7 +49,7 @@ Pooled AUC (the chance that a random machine text outranks a random human text):
 
 ## Provenance
 
-Every source below fed measured experiments in the study. This repository redistributes none of them. `data/selftest_cache.jsonl` contains only content hashes, slice labels, numeric scores and selected model answers (8,890 texts drawn from these corpora). Row counts describe the whole dataset. Individual tests scored subsets of these data (often 150 texts per class), not every row.
+Every source below fed measured experiments in the study. This repository redistributes none of them. `data/selftest_cache.jsonl` contains only content hashes, slice labels, numeric scores and selected model answers (8,890 texts drawn from these corpora). `scripts/fetch_corpora.py` downloads the sources into `data/raw/`, and `scripts/rebuild_dataset.py` checks every shipped hash against them. Row counts describe the whole dataset. Individual tests scored subsets of these data (often 150 texts per class), not every row.
 
 ### Datasets
 
@@ -97,6 +97,10 @@ OPENCODE_KEY=... ./origin_triage.py --endpoint zen --model jev-1.13-free --text 
 
 # offline reproduction of the published numbers, no API calls (exit 0 expected)
 ./origin_triage.py --reproduce
+
+# dataset check: fetch the source corpora, then rebuild every shipped text hash
+python3 scripts/fetch_corpora.py     # downloads into data/raw/; gated EditLens files need HF_TOKEN
+python3 scripts/rebuild_dataset.py   # needs pandas and pyarrow; exit 0 when every available text verifies
 ```
 
 Labels: `human`, `machine`, `abstain`. `abstain` is an honest outcome (below the frozen confidence gate θ = 0.31, or signal disagreement), not an error. Output schema and flags are documented in `origin_triage.py --help`. The published numbers reproduce offline. See [DESIGN.md](DESIGN.md) §9 for the boundary of what the repository can and cannot reproduce.
@@ -116,6 +120,8 @@ data/selftest_cache.jsonl     one row per distinct text (hash-keyed; no corpus t
 data/tier1_summary.json       published per-slice results (Tier-1 mass test)
 data/tier1_verdicts.json      pre-registered M1–M5 verdicts
 scripts/reproduce_tier1.py    recomputes the published tables and the headline AUCs from the cache
+scripts/fetch_corpora.py      downloads the source corpora into data/raw/
+scripts/rebuild_dataset.py    rebuilds and checks every shipped text hash (needs pandas, pyarrow)
 scripts/build_selftest_cache.py  lab-side builder for the cache (needs the source archive; does not run here)
 .github/workflows/repro.yml   CI: runs `origin_triage.py --reproduce` on every push
 ```

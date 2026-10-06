@@ -233,7 +233,7 @@ def build_verdicts(S: dict, rows: list[dict]) -> dict:
 
     events = []
     for r in rows:
-        for ev_seq, src, grp, pk in r["variants"]:
+        for ev_seq, src, grp, pk, _bundle_id in r["variants"]:
             if src in ("d4", "d4x"):
                 events.append((ev_seq, src, pk, grp, r["hash"]))
     events.sort()

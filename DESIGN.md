@@ -92,6 +92,8 @@ The `edited` option is retained for comparability, but it is almost never chosen
 | `./origin_triage.py --self-test` | Runs the rule replay only. Expects emitted 6,492 and accuracy 0.7751 |
 | `./origin_triage.py --answers stored.jsonl` | Applies the frozen rule to stored answers. No API calls |
 | `python3 scripts/reproduce_tier1.py` | Runs the same table and AUC checks as `--reproduce`. Exits non-zero on mismatch |
+| `python3 scripts/fetch_corpora.py` | Downloads the source corpora into `data/raw/`. The four gated EditLens files need a Hugging Face token |
+| `python3 scripts/rebuild_dataset.py` | Rebuilds every text in the cache from `data/raw/` and checks the recorded hash. The study run verified 8,391 of 8,890 texts. Needs pandas and pyarrow |
 | `python3 scripts/build_selftest_cache.py` | Lab-side only: rebuilds the cache from the source archive (needs the full corpus and `prep_tier1.py`, and does not run from this repository) |
 
 What this repository can and cannot reproduce:
@@ -100,5 +102,6 @@ What this repository can and cannot reproduce:
 |---|---|
 | The frozen rule, the Tier-1 tables and the headline AUCs | Reproduce offline with `--reproduce` |
 | The live detector on new text | Runs. The API is stochastic, so a new call is not an exact re-run of a stored call |
-| Corpus collection, item banks and the earlier phase responses | Not shipped. These items stay in the source workspace, and the corpora are not redistributed |
+| The corpus texts | Fetch with `scripts/fetch_corpora.py` and check with `scripts/rebuild_dataset.py`. The study run verified 8,391 of 8,890 texts (7,915 exact rebuilds, 476 by pool membership). 499 texts were generated in the study and cannot rebuild |
+| Item banks and the earlier phase responses | Not shipped. They stay in the source workspace |
 | EditLens scoring, zero-shot baselines, T2 and gateway checks | Quoted from the study record. Their score files are not shipped |

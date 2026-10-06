@@ -66,7 +66,7 @@ def main() -> int:
     for line in (lab / "editlens_pass" / "texts.jsonl").open(encoding="utf-8"):
         t = json.loads(line)
         key = short_hash(t["text"])
-        variants[key].append([seq, t["source"], t.get("group"), t.get("pair_key")])
+        variants[key].append([seq, t["source"], t.get("group"), t.get("pair_key"), t["id"]])
         seq += 1
         bundle[key] = {"bundle_id": t["id"], "source": t["source"], "group": t.get("group"),
                        "pair_key": t.get("pair_key")}
@@ -160,7 +160,7 @@ def main() -> int:
     # order (here: variant seq order) and assign each (source, pair_key, group) cell its hash.
     events = []
     for r in rows:
-        for ev_seq, src, grp, pk in r["variants"]:
+        for ev_seq, src, grp, pk, _bundle_id in r["variants"]:
             if src in ("d4", "d4x"):
                 events.append((ev_seq, src, pk, grp, r["hash"]))
     events.sort()

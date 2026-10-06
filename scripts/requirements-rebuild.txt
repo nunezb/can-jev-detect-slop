@@ -1,0 +1,4 @@
+# For scripts/fetch_corpora.py (downloads) and scripts/rebuild_dataset.py (dataset check).
+# The detector CLI and the offline reproduction checks need no packages.
+pandas
+pyarrow
