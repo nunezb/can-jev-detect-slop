@@ -1,0 +1,58 @@
+{
+ "M1": {
+  "verdict": "INCONCLUSIVE",
+  "in_band": "6/7",
+  "off_gt5pp": [
+   "editlens_val/ai_edited +0.060"
+  ],
+  "off_gt10pp": []
+ },
+ "M2": {
+  "verdict": "NEGATIVE",
+  "worst": "stp/pre_edit FPR 0.970",
+  "creative_fiction": {
+   "lamp/post_edit": 0.9229,
+   "b8/post": 0.93,
+   "stp/pre_edit": 0.9697
+  },
+  "non_fiction_max": 0.2455,
+  "non_fiction_strata": {
+   "editlens_val_src/source": 0.2235,
+   "hc3/human": 0.2455,
+   "editlens_val/human_written": 0.2049,
+   "arjun/human_side": 0.0236,
+   "idmgsp/real": 0.1124,
+   "grammarly_src/source": 0.1395,
+   "editlens_enron/human_written": 0.0,
+   "editlens_llama/human_written": 0.2429
+  }
+ },
+ "M3": {
+  "verdict": "POSITIVE",
+  "ensemble_emitted_acc": 0.7751,
+  "best_single": 0.7232,
+  "singles": {
+   "jev_raw": 0.7232,
+   "editlens": 0.7052
+  },
+  "coverage": 0.924,
+  "emitted_n": 6492,
+  "delta_vs_best_single": 0.0519
+ },
+ "M4": {
+  "verdict": "NEGATIVE",
+  "within_document_acc": 0.5968,
+  "within_detail": {
+   "lamp/pre_edit+post_edit": 0.5268,
+   "editlens_val/ai_generated+ai_edited": 0.6669
+  },
+  "cross_document_acc": 0.8062
+ },
+ "M5": {
+  "verdict": "INCONCLUSIVE",
+  "paired_texts": 200,
+  "flips_to_human": 14,
+  "flips_to_ai": 5,
+  "keep_machine_rate": 0.93
+ }
+}
