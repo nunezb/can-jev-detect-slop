@@ -32,22 +32,30 @@ Pooled AUC: EditLens-llama 0.821, Jev 0.782 (Jev's ranking score is P(ai) + P(ed
 
 ## Provenance
 
-Every corpus below fed measured experiments in the study; none is redistributed here. `data/selftest_cache.jsonl` contains only content hashes, stratum labels, numeric scores and selected model answers.
+Every source below fed measured experiments in the study; none of it is redistributed here. `data/selftest_cache.jsonl` contains only content hashes, stratum labels, numeric scores and selected model answers (8,890 texts drawn from these corpora). Row counts are dataset scale — individual arms scored stratified slices (often 150 texts per class), not every row.
 
-| Source | Role | Upstream | License (checked 2026-10-06) |
+### Datasets
+
+| Dataset | Rows (est.) | Role | Upstream | License (checked 2026-10-06) |
+|---|---|---|---|---|
+| `bench-labs/slop-classification` | 384 votes → 379 texts | Human "−1/0/+1 slop" votes; pilot, then demoted after a keying fix | <https://huggingface.co/datasets/bench-labs/slop-classification> | MIT (as recorded 2026-09-22) |
+| `arjun10g/slop-paraphrase-pairs-v2` | ≈3.7k pairs (3,315 train; 200 test; 200 val) | Human Reddit posts vs LLM paraphrases; main paired style corpus | <https://huggingface.co/datasets/arjun10g/slop-paraphrase-pairs-v2> | none declared (as recorded 2026-09-22) |
+| `ConicCat/SlopToPolish` | ≈1.1k edit traces (67 in test) | Machine span-edit traces (LAMP categories); polish-direction arm | <https://huggingface.co/datasets/ConicCat/SlopToPolish> | Apache-2.0 |
+| LAMP (`salesforce/creativity_eval`) | 1,057 edit pairs; 8,035 span edits | LLM drafts + professional human edits (CHI 2025); expert ground truth | <https://github.com/salesforce/creativity_eval> | BSD-3-Clause |
+| HC3 | ≈24.3k QA rows | Human vs ChatGPT Q&A; register/FPR tests | <https://huggingface.co/datasets/Hello-SimpleAI/HC3> | CC BY-SA 4.0 |
+| IDMGSP (`tum-nlp/IDMGSP`) | ≈36.6k paper records (incl. OOD-GPT3 split, 2.3k) | arXiv abstracts vs SCIgen/GPT-2/GPT-3/ChatGPT/Galactica | <https://huggingface.co/datasets/tum-nlp/IDMGSP> | OpenRAIL++ |
+| `pangram/editlens_iclr` | ≈80.6k rows (60k train; 2.4k val; 18.2k across three test splits) | Graded AI-edit corpus; supplies the Tier-1 strata | <https://huggingface.co/datasets/pangram/editlens_iclr> | CC BY-NC-SA 4.0 (noncommercial) |
+| `pangram/editlens_iclr_grammarly` | 1,768 | Instruction-conditioned edit subset | <https://huggingface.co/datasets/pangram/editlens_iclr_grammarly> | CC BY-NC-SA 4.0 (noncommercial) |
+| `ConsumerDividends/ai-slop-dataset` | 45 tell rules | AI-tell criteria pool (definitions, regexes, severity) | <https://huggingface.co/datasets/ConsumerDividends/ai-slop-dataset> | CC-BY-4.0 (as recorded 2026-09-22) |
+
+### Other sources
+
+| Source | Role | Upstream | License / notes |
 |---|---|---|---|
-| `bench-labs/slop-classification` | Human "−1/0/+1 slop" votes (pilot, then demoted) | <https://huggingface.co/datasets/bench-labs/slop-classification> | MIT (as recorded 2026-09-22) |
-| `arjun10g/slop-paraphrase-pairs-v2` | Human Reddit posts vs LLM paraphrases; main paired style corpus | <https://huggingface.co/datasets/arjun10g/slop-paraphrase-pairs-v2> | none declared (as recorded 2026-09-22) |
-| `ConicCat/SlopToPolish` | Machine span-edit traces (LAMP categories); polish-direction arm | <https://huggingface.co/datasets/ConicCat/SlopToPolish> | Apache-2.0 |
-| LAMP (`salesforce/creativity_eval`) | LLM drafts + professional human edits (CHI 2025); expert ground truth | <https://github.com/salesforce/creativity_eval> | BSD-3-Clause |
-| HC3 | Human vs ChatGPT Q&A; register/FPR tests | <https://huggingface.co/datasets/Hello-SimpleAI/HC3> | CC BY-SA 4.0 |
-| IDMGSP (`tum-nlp/IDMGSP`, incl. OOD-GPT3 split) | arXiv abstracts vs SCIgen/GPT-2/GPT-3/ChatGPT/Galactica | <https://huggingface.co/datasets/tum-nlp/IDMGSP> | OpenRAIL++ |
-| `pangram/editlens_iclr` (+ `editlens_iclr_grammarly`) | Graded AI-edit corpus; supplies the Tier-1 strata | <https://huggingface.co/datasets/pangram/editlens_iclr> | CC BY-NC-SA 4.0 (noncommercial) |
-| `pangram/editlens_roberta-large`, `pangram/editlens_Llama-3.2-3B` | EditLens-llama signal (primary where available) and roberta companion | <https://huggingface.co/pangram> | CC BY-NC-SA 4.0 (noncommercial) |
-| `ConsumerDividends/ai-slop-dataset` | 45 AI-tell rules with regexes; criteria pool | <https://huggingface.co/datasets/ConsumerDividends/ai-slop-dataset> | CC-BY-4.0 (as recorded 2026-09-22) |
 | Wikipedia *Signs of AI writing* | Community AI-tell inventory; criteria reference | <https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing> | CC BY-SA 4.0 |
 | Graphite *AI Tells* + *AI Now Writes* + Common Crawl | Frequency-based tells and pre-2022 human-text recipe; design reference only | <https://graphite.io/five-percent/research/ai-tells> | no license stated; reported-not-verified |
 | Shaib et al., *Measuring AI "Slop" in Text* (arXiv:2509.19163) | Slop taxonomy (3 themes / 10 codes); question wording reference | <https://arxiv.org/abs/2509.19163> | paper; annotations unreleased |
+| `pangram/editlens_roberta-large`, `pangram/editlens_Llama-3.2-3B` | EditLens signals — primary where available, roberta companion | <https://huggingface.co/pangram> | CC BY-NC-SA 4.0 (noncommercial) |
 | `tiiuae/falcon-7b` (+ `-instruct`) | Zero-shot detection baselines (Binoculars, log-likelihood, rank, entropy, Fast-DetectGPT) | <https://huggingface.co/tiiuae/falcon-7b> | Apache-2.0 |
 
 The TypeSafe System One API and its docs are at <https://docs.typesafe.ai/>; the model version used throughout is `jev-1.13.0` and vendor performance claims are reported, not re-verified here.
