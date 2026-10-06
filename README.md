@@ -92,12 +92,14 @@ The TypeSafe System One API and its docs are at <https://docs.typesafe.ai/>. The
 # alternate gateway
 OPENCODE_KEY=... ./origin_triage.py --endpoint zen --model jev-1.13-free --text "..."
 
-# reproduction, no API calls (exit 0 expected)
-./origin_triage.py --self-test                          # frozen rule replay: emitted 6492, accuracy 0.7751
-python3 scripts/reproduce_tier1.py --check              # recomputes the published tables from the cache
+# replay stored answers offline (no API calls): {"id": ..., "choice": ..., "confidence": ..., "probabilities": {...}}
+./origin_triage.py --answers stored.jsonl --out verdicts.jsonl
+
+# offline reproduction of the published numbers, no API calls (exit 0 expected)
+./origin_triage.py --reproduce
 ```
 
-Labels: `human`, `machine`, `abstain`. `abstain` is an honest outcome (below the frozen confidence gate θ = 0.31, or signal disagreement), not an error. Output schema and flags are documented in `origin_triage.py --help`.
+Labels: `human`, `machine`, `abstain`. `abstain` is an honest outcome (below the frozen confidence gate θ = 0.31, or signal disagreement), not an error. Output schema and flags are documented in `origin_triage.py --help`. The published numbers reproduce offline. See [DESIGN.md](DESIGN.md) §9 for the boundary of what the repository can and cannot reproduce.
 
 ## Scope and limitations
 
@@ -106,14 +108,16 @@ The measured recipe is valid for **non-fiction** (posts, Q&A, abstracts, reviews
 ## Layout
 
 ```
-origin_triage.py              the detector CLI (stdlib only)
+origin_triage.py              the detector CLI: live calls, offline answer replay and reproduction
+                              checks (stdlib only)
 frozen_metric.json            the frozen rule: question wording, gate, label set, guards
 data/selftest_cache.jsonl     one row per distinct text (hash-keyed; no corpus text): stratum,
                               label, selected Jev answer, EditLens scores, bundle history
 data/tier1_summary.json       published per-stratum results (Tier-1 mass test)
 data/tier1_verdicts.json      pre-registered M1–M5 verdicts
-scripts/reproduce_tier1.py    recomputes both JSONs from the cache; --check exits non-zero on mismatch
-scripts/build_selftest_cache.py  lab-side builder for the cache (requires the source archive; not runnable here)
+scripts/reproduce_tier1.py    recomputes the published tables and the headline AUCs from the cache
+scripts/build_selftest_cache.py  lab-side builder for the cache (needs the source archive; does not run here)
+.github/workflows/repro.yml   CI: runs `origin_triage.py --reproduce` on every push
 ```
 
 ## License

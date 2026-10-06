@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""reproduce_tier1.py — recompute the published Tier-1 results from data/selftest_cache.jsonl
-and check them against the shipped JSONs (data/tier1_summary.json, data/tier1_verdicts.json).
+"""reproduce_tier1.py — recompute the published Tier-1 results from data/selftest_cache.jsonl and
+check them against the shipped JSONs (data/tier1_summary.json, data/tier1_verdicts.json). The same
+pass recomputes the headline slice AUCs and checks them against pinned anchors.
 
-This is the frozen reproduction for the repository: no API calls, no third-party text, no lab
-archive. The arithmetic mirrors the original analysis scripts (`analyze_tier1.py` and
-`analyze_tier1_verdicts.py` from the lab archive) field for field, including the stratum-level
-rounding; the only difference is the data source: the hash-keyed cache instead of the raw corpus.
+This is the offline reproduction for the repository. It makes no API calls, uses no third-party
+text, and does not need the lab archive. The arithmetic mirrors the original analysis scripts
+(`analyze_tier1.py` and `analyze_tier1_verdicts.py` from the lab archive) field for field,
+including the stratum-level rounding. The only difference is the data source: the hash-keyed
+cache instead of the raw corpus.
+
+`./origin_triage.py --reproduce` calls both checks in this module.
 
 Usage:
-    python3 scripts/reproduce_tier1.py            # human-readable report + check (default)
+    python3 scripts/reproduce_tier1.py            # human-readable report + checks (default)
     python3 scripts/reproduce_tier1.py --check    # exit 0 iff everything matches exactly
 
 Exit codes: 0 = checked, all values match; 1 = mismatch or missing input.
@@ -39,6 +43,19 @@ PRIOR = {
     ("editlens_val", "ai_generated"): 0.85,
     ("editlens_val", "human_written"): 0.22,
     ("lamp", "pre_edit"): None, ("lamp", "post_edit"): None,
+}
+
+# Headline slice figures quoted in README.md and DESIGN.md. check_headline_aucs() recomputes them
+# from the cache and compares them with these anchors (set 2026-10-06 from baselines_summary.json).
+# non-fiction = the nine non-fiction source families. creative = the paired creative strata
+# (LAMP, STP and the main B8 groups). The B8 rewrites v1-v3 and the D4/D4x arms are separate.
+NONFICTION_SOURCES = {"hc3", "arjun", "idmgsp", "editlens_val", "editlens_val_src",
+                      "grammarly", "grammarly_src", "editlens_enron", "editlens_llama"}
+CREATIVE_HUMAN = {("lamp", "post_edit"), ("b8", "post"), ("stp", "pre_edit")}
+CREATIVE_MACHINE = {("lamp", "pre_edit"), ("stp", "post_edit"), ("b8", "pre")}
+HEADLINE_ANCHORS = {
+    "nonfiction": {"n": 5641, "jev": 0.8725, "el_llama": 0.9574},
+    "creative": {"n": 2179, "jev": 0.6138, "el_llama": 0.8237},
 }
 
 
@@ -272,20 +289,20 @@ def diff(a, b, path="", out=None, tol=1e-9):
     return out
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--check", action="store_true", help="exit non-zero on any mismatch")
-    args = ap.parse_args()
-
-    metric = json.loads((REPO / "frozen_metric.json").read_text(encoding="utf-8"))
+def check_summary_and_verdicts(repo: Path) -> tuple[list, dict, dict]:
+    """Recompute the summary and the verdicts. Return (diffs, summary, verdicts)."""
+    data = repo / "data"
+    for name in ("selftest_cache.jsonl", "tier1_summary.json", "tier1_verdicts.json"):
+        if not (data / name).exists():
+            return [f"missing data/{name}"], {}, {}
+    metric = json.loads((repo / "frozen_metric.json").read_text(encoding="utf-8"))
     theta = metric["reference_pool_for_theta"]["computed_theta"]
     el_cut = 0.5
-    rows = load_cache(DATA)
-
+    rows = load_cache(data)
     S = build_summary(rows, theta, el_cut)
     V = build_verdicts(S, rows)
-    S_shipped = json.loads((DATA / "tier1_summary.json").read_text(encoding="utf-8"))
-    V_shipped = json.loads((DATA / "tier1_verdicts.json").read_text(encoding="utf-8"))
+    S_shipped = json.loads((data / "tier1_summary.json").read_text(encoding="utf-8"))
+    V_shipped = json.loads((data / "tier1_verdicts.json").read_text(encoding="utf-8"))
 
     diffs = []
     for k in ("theta", "el_cut", "n_bundle", "n_scored", "n_with_jev"):
@@ -300,22 +317,64 @@ def main() -> int:
     for k in sorted(set(rec_by) & set(ship_by)):
         diffs += diff(rec_by[k], ship_by[k], f"summary.strata[{k}]")
     diffs += diff(V, V_shipped, "verdicts")
+    return diffs, S, V
 
-    # console report
-    p = S["pooled"]
-    print(f"recomputed from cache ({S['n_bundle']} texts, {S['n_scored']} scored):")
-    print(f"  pooled: acc_raw {p.get('acc_raw')} | coverage {p.get('coverage')} | "
-          f"emitted_acc {p.get('emitted_acc')} (n={p.get('emitted_n')}) | el_acc {p.get('el_acc')} | "
-          f"AUC jev {p.get('auc_jev')} / el {p.get('auc_el')} | agreement {p.get('jev_el_agreement')}")
-    for tag in ("M1", "M2", "M3", "M4", "M5"):
-        print(f"  {tag}: {V[tag]['verdict']}")
 
-    if diffs:
-        print(f"\nCHECK FAILED: {len(diffs)} mismatch(es):")
-        for d in diffs[:40]:
+def _pool_aucs(rows: list, keep) -> tuple:
+    sub = [r for r in rows if keep(r) and r["truth"] and r["jev_probs"]]
+    jev = [r["jev_probs"].get("ai", 0) + r["jev_probs"].get("edited", 0) for r in sub]
+    lab = [1 if r["truth"] == "machine" else 0 for r in sub]
+    el = [r for r in sub if r["el_llama"] is not None]
+    return (len(sub), auc(jev, lab),
+            auc([r["el_llama"] for r in el], [1 if r["truth"] == "machine" else 0 for r in el]))
+
+
+def check_headline_aucs(repo: Path) -> list:
+    """Recompute the headline slice AUCs from the cache. Compare them with the pinned anchors."""
+    if not (repo / "data" / "selftest_cache.jsonl").exists():
+        return ["missing data/selftest_cache.jsonl"]
+    rows = load_cache(repo / "data")
+    diffs = []
+    for name, keep in (("nonfiction", lambda r: r["source"] in NONFICTION_SOURCES),
+                       ("creative", lambda r: (r["source"], r["group"]) in (CREATIVE_HUMAN | CREATIVE_MACHINE))):
+        n, jev_auc, el_auc = _pool_aucs(rows, keep)
+        a = HEADLINE_ANCHORS[name]
+        if n != a["n"]:
+            diffs.append(f"{name}: n {n} != {a['n']}")
+        if jev_auc is None or abs(jev_auc - a["jev"]) > 5e-4:
+            diffs.append(f"{name}: Jev AUC {jev_auc} != {a['jev']}")
+        if el_auc is None or abs(el_auc - a["el_llama"]) > 5e-4:
+            diffs.append(f"{name}: EditLens-llama AUC {el_auc} != {a['el_llama']}")
+    return diffs
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--check", action="store_true",
+                    help="exit non-zero on any mismatch (this is the default behaviour)")
+    args = ap.parse_args()
+
+    diffs, S, V = check_summary_and_verdicts(REPO)
+    adiffs = check_headline_aucs(REPO)
+
+    if S:
+        p = S["pooled"]
+        print(f"recomputed from cache ({S['n_bundle']} texts, {S['n_scored']} scored):")
+        print(f"  pooled: acc_raw {p.get('acc_raw')} | coverage {p.get('coverage')} | "
+              f"emitted_acc {p.get('emitted_acc')} (n={p.get('emitted_n')}) | el_acc {p.get('el_acc')} | "
+              f"AUC jev {p.get('auc_jev')} / el {p.get('auc_el')} | agreement {p.get('jev_el_agreement')}")
+        for tag in ("M1", "M2", "M3", "M4", "M5"):
+            print(f"  {tag}: {V[tag]['verdict']}")
+    for name, a in HEADLINE_ANCHORS.items():
+        print(f"  headline {name}: n {a['n']} | Jev AUC {a['jev']} | EditLens-llama AUC {a['el_llama']}")
+
+    problems = diffs + adiffs
+    if problems:
+        print(f"\nCHECK FAILED: {len(problems)} mismatch(es):")
+        for d in problems[:40]:
             print("  -", d)
         return 1
-    print("\nCHECK OK: summary and verdicts reproduce the shipped JSONs exactly.")
+    print("\nCHECK OK: summary, verdicts and headline AUCs reproduce the shipped JSONs exactly.")
     return 0
 
 

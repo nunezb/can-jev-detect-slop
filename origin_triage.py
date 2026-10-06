@@ -36,14 +36,21 @@ Usage
   ./origin_triage.py --jsonl corpus.jsonl --editlens-scores el.jsonl --out verdicts.jsonl
   #   el.jsonl rows: {"id": <same id as in corpus.jsonl>, "score": 0.97}
 
-  # reproduce the frozen Tier-1 numbers from cached responses (no API calls)
-  ./origin_triage.py --self-test
+  # replay stored answers offline (no API calls)
+  ./origin_triage.py --answers stored.jsonl --out verdicts.jsonl
+  #   stored.jsonl rows: {"id": ..., "choice": ..., "confidence": ..., "probabilities": {...}, "editlens_llama": 0.97}
 
-Exit codes: 0 = ran (labels may include "abstain"), 2 = configuration error, 3 = all requests failed.
+  # rerun every offline reproduction check, no API calls
+  ./origin_triage.py --reproduce
+  ./origin_triage.py --self-test          # rule replay only
+
+Exit codes: 0 = ran (labels may include "abstain"), 2 = configuration error, 3 = all requests failed,
+4 = --strict-model violation (the served model differs from the requested model).
 """
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -183,6 +190,15 @@ def decide(jev: dict, el_score: float | None, theta: float, el_cut: float) -> di
     return out
 
 
+def model_matches(requested: str, echo: str | None) -> bool:
+    """True when the served model matches the request. Gateway aliases can drop a '-free'
+    suffix or differ by a patch segment, so compare version prefixes."""
+    if not echo:
+        return True
+    req = requested[:-5] if requested.endswith("-free") else requested
+    return echo == req or echo.startswith(req) or req.startswith(echo)
+
+
 def read_inputs(args) -> list[dict]:
     rows: list[dict] = []
     if args.text is not None or args.text_file is not None:
@@ -201,31 +217,115 @@ def read_inputs(args) -> list[dict]:
     return rows
 
 
-def self_test(metric: dict) -> int:
-    """Replay the frozen rule over the shipped hash-keyed cache: no API calls, proves the rule as
-    coded reproduces the numbers recorded in the lab notebook (emitted 6,492; accuracy 0.7751)."""
-    n_scored = emitted = correct = adv = 0
-    for line in (HERE / "data" / "selftest_cache.jsonl").open(encoding="utf-8"):
+def frozen_rule_replay(metric: dict) -> dict | None:
+    """Replay the frozen rule over the shipped hash-keyed cache. No API calls."""
+    cache = HERE / "data" / "selftest_cache.jsonl"
+    if not cache.exists():
+        return None
+    n_scored = emitted = correct = advisories = 0
+    for line in cache.open(encoding="utf-8"):
         r = json.loads(line)
         if r["truth"] is None or r["jev_choice"] is None or r["el_llama"] is None:
             continue
         n_scored += 1
         d = decide({"choice": r["jev_choice"], "confidence": r["jev_conf"],
                     "probabilities": r["jev_probs"] or {}}, r["el_llama"],
-                   metric["theta"], 0.5)
+                   metric["theta"], metric["el_cut"])
         if "creative_prose_risk_both_signals_saturated" in d["advisories"]:
-            adv += 1
+            advisories += 1
         if d["label"] != "abstain":
             emitted += 1
             correct += d["label"] == r["truth"]
-    acc = correct / max(emitted, 1)
-    print(f"self-test on {n_scored} cached Tier-1 texts (hash-keyed cache; no third-party text)")
-    print(f"  theta {metric['theta']} | emitted {emitted} | emitted accuracy {acc:.4f}")
-    print(f"  creative-prose advisories fired: {adv}")
-    print("  expected (NOTES.md frozen ensemble): emitted 6492, accuracy 0.7751")
-    ok = emitted == 6492 and abs(acc - 0.7751) < 0.002
+    return {"n_scored": n_scored, "emitted": emitted,
+            "acc": correct / max(emitted, 1), "advisories": advisories}
+
+
+def self_test(metric: dict) -> int:
+    """Replay the frozen rule only. The expected numbers are the published Tier-1 result."""
+    r = frozen_rule_replay(metric)
+    if r is None:
+        print("missing data/selftest_cache.jsonl")
+        return 1
+    print(f"self-test on {r['n_scored']} cached Tier-1 texts (hash-keyed cache; no third-party text)")
+    print(f"  theta {metric['theta']} | emitted {r['emitted']} | emitted accuracy {r['acc']:.4f}")
+    print(f"  creative-prose advisories fired: {r['advisories']}")
+    print("  expected (published frozen ensemble): emitted 6492, accuracy 0.7751")
+    ok = r["emitted"] == 6492 and abs(r["acc"] - 0.7751) < 0.002
     print(f"  regression check: {'PASS' if ok else 'MISMATCH'}")
     return 0 if ok else 1
+
+
+def _load_reproduce_module():
+    spec = importlib.util.spec_from_file_location("reproduce_tier1", HERE / "scripts" / "reproduce_tier1.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def reproduce(metric: dict) -> int:
+    """Run every offline check the repository ships. No API calls."""
+    print("reproduction ledger (offline, no API calls)")
+    r = frozen_rule_replay(metric)
+    if r is None:
+        print("  [FAIL] missing data/selftest_cache.jsonl")
+        return 1
+    ok_rule = r["emitted"] == 6492 and abs(r["acc"] - 0.7751) < 0.002
+    print(f"  [{'ok' if ok_rule else 'FAIL'}] frozen rule replay: emitted {r['emitted']}, "
+          f"accuracy {r['acc']:.4f}, advisories {r['advisories']}")
+    mod = _load_reproduce_module()
+    diffs, _S, _V = mod.check_summary_and_verdicts(HERE)
+    ok_tables = not diffs
+    detail = "exact match" if ok_tables else f"{len(diffs)} mismatch(es)"
+    print(f"  [{'ok' if ok_tables else 'FAIL'}] tier-1 summary and M1-M5 vs shipped JSONs: {detail}")
+    for d in diffs[:10]:
+        print(f"      - {d}")
+    adiffs = mod.check_headline_aucs(HERE)
+    ok_aucs = not adiffs
+    detail = "exact match" if ok_aucs else f"{len(adiffs)} mismatch(es)"
+    print(f"  [{'ok' if ok_aucs else 'FAIL'}] headline slice AUCs vs pinned anchors: {detail}")
+    for d in adiffs[:10]:
+        print(f"      - {d}")
+    ok = ok_rule and ok_tables and ok_aucs
+    print(f"=> {'REPRODUCED' if ok else 'NOT REPRODUCED'}")
+    return 0 if ok else 1
+
+
+def read_answers(path: Path) -> list[dict]:
+    rows = []
+    for i, line in enumerate(l for l in path.read_text(encoding="utf-8").splitlines() if l.strip()):
+        o = json.loads(line)
+        rows.append({"id": str(o.get("id") or f"row-{i}"), "choice": o.get("choice"),
+                     "confidence": o.get("confidence"), "probabilities": o.get("probabilities") or {},
+                     "editlens_llama": o.get("editlens_llama")})
+    return rows
+
+
+def replay_answers(args, metric: dict) -> int:
+    """Apply the frozen rule to stored answers. No API calls."""
+    rows = read_answers(Path(args.answers))
+    out_rows = []
+    labels: dict = {}
+    for r in rows:
+        if not r["choice"]:
+            rec = {"id": r["id"], "label": "abstain", "advisories": ["missing_choice"], "error": None}
+        elif r["choice"] not in ("human", "ai", "edited"):
+            rec = {"id": r["id"], "label": "abstain", "advisories": ["unknown_choice"], "error": None}
+        else:
+            d = decide({"choice": r["choice"], "confidence": r["confidence"],
+                        "probabilities": r["probabilities"]}, r["editlens_llama"],
+                       metric["theta"], metric["el_cut"])
+            rec = {"id": r["id"], **d, "error": None}
+        rec["n_chars"] = None
+        out_rows.append(rec)
+        labels[rec["label"]] = labels.get(rec["label"], 0) + 1
+    out_rows.sort(key=lambda r: r["id"])
+    text = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in out_rows)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+    else:
+        sys.stdout.write(text)
+    print(f"# {len(out_rows)} stored answers | labels {labels} (offline replay, no API calls)", file=sys.stderr)
+    return 0
 
 
 def main() -> int:
@@ -242,14 +342,22 @@ def main() -> int:
     ap.add_argument("--model", default=None, help="model id; defaults per endpoint")
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--no-machine-like", action="store_true")
+    ap.add_argument("--answers", help='offline replay: JSONL {"id": ..., "choice": ..., "confidence": ..., "probabilities": {...}, "editlens_llama": ...}')
+    ap.add_argument("--reproduce", action="store_true", help="run all offline reproduction checks")
     ap.add_argument("--self-test", action="store_true", help="replay the frozen rule on cached data")
+    ap.add_argument("--strict-model", action="store_true",
+                    help="exit 4 when the served model differs from --model")
     args = ap.parse_args()
 
     metric = load_metric(Path(args.metric))
+    if args.reproduce:
+        return reproduce(metric)
     if args.self_test:
         return self_test(metric)
+    if args.answers:
+        return replay_answers(args, metric)
     if not (args.text or args.text_file or args.jsonl or args.stdin):
-        ap.error("provide --text, --text-file, --jsonl or --stdin (or --self-test)")
+        ap.error("provide --text, --text-file, --jsonl, --stdin or --answers (or --reproduce / --self-test)")
 
     endpoint = DIRECT_ENDPOINT if args.endpoint == "direct" else ZEN_ENDPOINT
     model = args.model or ("jev-1.13.0" if args.endpoint == "direct" else "jev-1.13-free")
@@ -277,17 +385,21 @@ def main() -> int:
         t0 = time.time()
         j = call_jev(r["text"], key, endpoint, model, ask_machine_like=not args.no_machine_like)
         ms = int((time.time() - t0) * 1000)
+        drifted = False
         if j.get("ok"):
             u = j.get("usage") or {}
             with lock:
                 usage_in += int(u.get("input_tokens") or 0)
                 usage_out += int(u.get("output_tokens") or 0)
-        d = decide(j, el_scores.get(r["id"]), metric["theta"], 0.5) if j.get("ok") else {
+            drifted = not model_matches(model, j.get("model_echo"))
+        d = decide(j, el_scores.get(r["id"]), metric["theta"], metric["el_cut"]) if j.get("ok") else {
             "label": "abstain", "advisories": ["request_failed"], "error": j.get("error")}
         rec = {"id": r["id"], "n_chars": len(r["text"]), "label": d["label"],
                "model_requested": model, "endpoint": args.endpoint, "latency_ms": ms, **d}
         if j.get("ok"):
             rec["model_echo"] = j.get("model_echo")
+            if drifted:
+                rec["advisories"] = list(rec["advisories"]) + ["model_drift"]
         with lock:
             out_rows.append(rec)
             lat.append(ms)
@@ -309,8 +421,16 @@ def main() -> int:
           f"median {statistics.median(lat) if lat else 0:.0f} ms | "
           f"tokens in {usage_in:,} out {usage_out:,} | "
           f"est ${usage_in / 1e6 * 0.042:.4f}", file=sys.stderr)
+    n_drift = sum(1 for r in out_rows if "model_drift" in (r.get("advisories") or []))
+    if n_drift:
+        serveds = sorted({str(r.get("model_echo")) for r in out_rows
+                          if "model_drift" in (r.get("advisories") or [])})
+        print(f"# WARNING: the served model differs from {model!r}: {', '.join(serveds)} "
+              f"({n_drift} responses)", file=sys.stderr)
     if ok == 0:
         return 3
+    if args.strict_model and n_drift:
+        return 4
     return 0
 
 

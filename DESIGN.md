@@ -1,6 +1,6 @@
 # Design — how the study was run
 
-Technical design of the study behind `origin_triage.py`, condensed from the lab notebook (which is not shipped here). It covers what was measured, how, the pre-registered thresholds, and what was learned. The full per-request record lives in the source workspace. Every number quoted below is reproduced by `scripts/reproduce_tier1.py` where the cache supports it.
+Technical design of the study behind `origin_triage.py`, condensed from the lab notebook (which is not shipped here). It covers what was measured, how, the pre-registered thresholds, and what was learned. The full per-request record lives in the source workspace. `./origin_triage.py --reproduce` rechecks every Tier-1 number below. §9 lists what the cache does not cover.
 
 Run window: 2026-09-22 to 2026-09-24. Model pinned at `jev-1.13.0` throughout (gateway comparison against OpenCode Zen `jev-1.13`). ≈15k API calls by 2026-09-23 (≈$0.6 at vendor list price), plus the 6,067-call mass test (≈$0.18) and smaller reliability and gateway runs. GPU passes (EditLens scoring, baselines, the T2 retrain) ran on Modal at $0.35–$0.89 each.
 
@@ -84,10 +84,21 @@ The `edited` option is retained for comparability, but it is almost never chosen
 - **Single vendor, pinned version**: all numbers are `jev-1.13.0` (plus a gateway-equivalence check). The stochastic API is characterized by measured noise floors. Fine-grained comparisons (<0.05) require paired designs and repeats.
 - **Third-party instruments**: EditLens truncates at 512/1024 tokens. Zero-shot baseline thresholds come from the published recipes. Corpus licenses vary (see README), and no corpus text is redistributed here.
 
-## 9. Reproduction map
+## 9. Reproduction map and boundaries
 
 | Entry point | What it does |
 |---|---|
-| `./origin_triage.py --self-test` | Replays the frozen rule over `data/selftest_cache.jsonl`. Expects emitted 6,492, accuracy 0.7751, 3,501 creative-prose advisories. Exits non-zero on mismatch |
-| `python3 scripts/reproduce_tier1.py --check` | Recomputes the published summary and M1–M5 verdicts from the cache and checks them field-for-field against `data/*.json`. Exits non-zero on any mismatch |
-| `python3 scripts/build_selftest_cache.py` | Lab-side only: rebuilds the cache from the source archive (requires the full corpus and `prep_tier1.py`, and is not runnable from this repository) |
+| `./origin_triage.py --reproduce` | Runs every offline check: the rule replay, the published tables and the headline AUCs. Exits non-zero on any mismatch |
+| `./origin_triage.py --self-test` | Runs the rule replay only. Expects emitted 6,492 and accuracy 0.7751 |
+| `./origin_triage.py --answers stored.jsonl` | Applies the frozen rule to stored answers. No API calls |
+| `python3 scripts/reproduce_tier1.py` | Runs the same table and AUC checks as `--reproduce`. Exits non-zero on mismatch |
+| `python3 scripts/build_selftest_cache.py` | Lab-side only: rebuilds the cache from the source archive (needs the full corpus and `prep_tier1.py`, and does not run from this repository) |
+
+What this repository can and cannot reproduce:
+
+| Item | Status |
+|---|---|
+| The frozen rule, the Tier-1 tables and the headline AUCs | Reproduce offline with `--reproduce` |
+| The live detector on new text | Runs. The API is stochastic, so a new call is not an exact re-run of a stored call |
+| Corpus collection, item banks and the earlier phase responses | Not shipped. These items stay in the source workspace, and the corpora are not redistributed |
+| EditLens scoring, zero-shot baselines, T2 and gateway checks | Quoted from the study record. Their score files are not shipped |
