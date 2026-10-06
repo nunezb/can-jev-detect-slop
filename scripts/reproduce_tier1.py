@@ -29,8 +29,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 DATA = REPO / "data"
 
-# Prior estimates from the lab notebook (Phase 0-5) for strata that already had Jev origin_choice.
-# value = (ai_rate_for_machine_strata, fpr_for_human_strata) as the relevant one per stratum.
+# Prior estimates from the study for the slices that already had a Jev origin_choice answer.
+# value = (machine-call rate for machine slices, false-positive rate for human slices), one per slice.
 PRIOR = {
     ("hc3", "human"): 0.209,
     ("idmgsp", "real"): 0.127,
@@ -47,8 +47,9 @@ PRIOR = {
 
 # Headline slice figures quoted in README.md and DESIGN.md. check_headline_aucs() recomputes them
 # from the cache and compares them with these anchors (set 2026-10-06 from baselines_summary.json).
-# non-fiction = the nine non-fiction source families. creative = the paired creative strata
-# (LAMP, STP and the main B8 groups). The B8 rewrites v1-v3 and the D4/D4x arms are separate.
+# non-fiction = the nine non-fiction source families. creative = the paired creative slices
+# (LAMP, STP and the main B8 candidate groups; see DESIGN.md §3). The B8 rewrites v1-v3 and the
+# D4/D4x arms are separate.
 NONFICTION_SOURCES = {"hc3", "arjun", "idmgsp", "editlens_val", "editlens_val_src",
                       "grammarly", "grammarly_src", "editlens_enron", "editlens_llama"}
 CREATIVE_HUMAN = {("lamp", "post_edit"), ("b8", "post"), ("stp", "pre_edit")}

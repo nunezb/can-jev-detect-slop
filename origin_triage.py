@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""origin_triage.py — the Phase-6 detector CLI.
+"""origin_triage.py — the detector CLI.
 
 Implements the rule frozen in `frozen_metric.json` verbatim: Jev
 `origin_choice` (the 3-way question, verbatim) + a confidence gate at theta, an optional
 EditLens-llama cross-check, label set {human, machine, abstain}, and disagreement -> abstain.
 
-Shipping decision (pre-registered, from the Tier-1 gate): **EditLens-llama is the primary signal
+Shipping decision (pre-registered, from the final mass test): **EditLens-llama is the primary signal
 where it is available, Jev is the advisory/cross-check signal.** Measured reasons: on non-fiction
-EditLens-llama reaches AUC 0.961 vs Jev 0.872, and EditLens has human FPR 0.00-0.02 on the
-non-fiction corpora; Jev uniquely covers generators EditLens misses (gpt2/gpt3/scigen, Jev
+EditLens-llama reaches AUC 0.957 vs Jev 0.872, and EditLens has human FPR 0.00-0.02 on the
+non-fiction corpora; Jev uniquely covers generators EditLens misses (GPT-2, GPT-3 and the fake-paper generator SCIgen, Jev
 detection 0.97-1.00 vs EditLens 0.01-0.27), so the two are kept together.
 
 SCOPE LIMITATION, measured, not hypothetical: on **human creative fiction** both detectors fail.
-Jev's false-positive rate is 0.92-0.97 (AUC 0.597, near chance) and EditLens-llama's is 0.88-1.00
-on LAMP expert rewrites, B8 expert rewrites and untouched STP amateur paragraphs. The CLI cannot
+Jev's false-positive rate is 0.92-0.97 (AUC 0.614, near chance) and EditLens-llama's is 0.88-1.00
+on professional rewrites of AI drafts, expert rewrites and untouched amateur paragraphs. The CLI cannot
 detect that condition from the two signals alone -- in creative prose both agree on "machine" --
 so it emits an ADVISORY warning when both signals saturate. The warning threshold is post-hoc and
 is reported as advisory, never as a label.
 
 This tool answers ONE question: is this text machine-generated? It deliberately exposes no
-quality, polish or "slop" score: those axes were measured to be biased toward machine register
+quality, polish or "slop" score: those axes were measured to be biased toward machine style
 (Jev `quality_score` correlates 0.70 with an independent AI-edit detector, and prefers the raw LLM
 draft over the human expert rewrite of it 93.3% of the time). Do not add them back.
 
