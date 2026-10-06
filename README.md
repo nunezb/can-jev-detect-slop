@@ -123,3 +123,4 @@ scripts/build_selftest_cache.py  lab-side builder for the cache (needs the sourc
 ## License
 
 MIT — see [LICENSE](LICENSE). The repository contains no third-party text; per-source terms are listed in the provenance table and apply to the original corpora.
+# can-jev-detect-slop
