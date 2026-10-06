@@ -1,6 +1,6 @@
 # Can Jev detect AI slop?
 
-*(Answer: Depends on what "slop" means. If task is "detect AI-generated text", Jev is accurate (AUC 0.87, n = 5,641) on non-fiction and fails on creative prose. For writing quality, the answer is no: the scores reward machine style, not writing quality, and a rewrite can erase the slop score.)*
+*(Answer: Depends on what "slop" means. If the task is "detect AI-generated text", Jev is decently accurate (AUC 0.87, n = 5,641) on non-fiction and fails on creative prose. For writing quality, the answer is no: the scores reward machine style, not writing quality, and a rewrite can erase the slop score.)*
 
 What we did: over three days (2026-09-22 → 24), TypeSafe's System One model (Jev, `jev-1.13.0`) received ≈20k requests. The requests measured four things: origin (human / AI / AI-edited), "slop" and writing quality, named writing faults, and whether edits move a judgment in one direction. Every judged property was stated in the request.
 
@@ -33,7 +33,7 @@ This repository ships **code plus derived, hash-keyed data only** — no third-p
 | Jev `origin_choice` alone                                   | 0.723            | 1.000                  |
 | EditLens-llama alone                                        | 0.705            | 1.000                  |
 
-Pooled AUC: EditLens-llama 0.821, Jev 0.782. Jev's ranking score is P(ai) + P(edited). The two signals agree on 80.2%. On non-fiction alone the ordering holds (≈0.96 vs ≈0.87). The ensemble beats the best single signal by +5.2pp. Texts not emitted abstain: 1,374 because the two signals disagreed, plus 645 below the confidence gate.
+Pooled AUC: EditLens-llama 0.821, Jev 0.782. Jev's ranking score is P(ai) + P(edited). The two signals agree on 80.2%. On non-fiction alone the ordering holds (≈0.96 vs ≈0.87, n = 5,641). The ensemble beats the best single signal by +5.2pp. Texts not emitted abstain: 1,374 because the two signals disagreed, plus 645 below the confidence gate.
 
 **Where it works — non-fiction.** Human false-positive rate 0.02–0.25 and machine detection 0.80–1.00 on generated text (AI-*edited* text is a separate, harder category: 0.47–0.75): Reddit-pair human side 0.024, arXiv abstracts 0.112, Grammarly source text 0.140, EditLens-val human writing 0.205, casual Q&A (HC3) 0.245. Machine text: LLM drafts 0.96–0.98, GPT-2/SCIgen/ChatGPT abstracts 1.000/1.000/0.993, ChatGPT-adjacent Q&A 1.00.
 
