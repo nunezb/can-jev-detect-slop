@@ -1,16 +1,23 @@
 # Design — how the study was run
 
-Technical design of the study behind `origin_triage.py`, condensed from the lab notebook (which is not shipped here). It covers what was measured, how, the pre-registered thresholds, and what was learned. The full per-request record lives in the source workspace; every number quoted below is reproduced by `scripts/reproduce_tier1.py` where the cache supports it.
+Technical design of the study behind `origin_triage.py`, condensed from the lab notebook (which is not shipped here). It covers what was measured, how, the pre-registered thresholds, and what was learned. The full per-request record lives in the source workspace. Every number quoted below is reproduced by `scripts/reproduce_tier1.py` where the cache supports it.
 
-Run window: 2026-09-22 to 2026-09-24. Model pinned at `jev-1.13.0` throughout (gateway comparison against OpenCode Zen `jev-1.13`). ≈15k API calls by 2026-09-23 (≈$0.6 at vendor list price), plus the 6,067-call mass test (≈$0.18) and smaller reliability/gateway runs; GPU passes (EditLens scoring, baselines, the T2 retrain) ran on Modal at $0.35–$0.89 each.
+Run window: 2026-09-22 to 2026-09-24. Model pinned at `jev-1.13.0` throughout (gateway comparison against OpenCode Zen `jev-1.13`). ≈15k API calls by 2026-09-23 (≈$0.6 at vendor list price), plus the 6,067-call mass test (≈$0.18) and smaller reliability and gateway runs. GPU passes (EditLens scoring, baselines, the T2 retrain) ran on Modal at $0.35–$0.89 each.
 
 ## 1. Question and scope
 
-The program measured how a System One model (Jev) judges four text properties when the property is stated explicitly in the request: (T1) origin — human vs AI vs AI-edited; (T2) slop/quality — "AI slop", "low quality", "well written", scalar quality; (T3) named writing-fault codes; (T4) polish direction — does an edit improve the judgment monotonically? Two framing manipulations ran throughout: where criteria live (state vs question vs absent) and how the property is named. Out of scope: mathematical writing, production detector claims, publication-grade benchmark claims. Vendor performance claims are reported, not re-verified (workspace R5 discipline).
+The program measured how a System One model (Jev) judges four text properties when the property is stated explicitly in the request:
+
+- (T1) origin — human vs AI vs AI-edited;
+- (T2) slop/quality — "AI slop", "low quality", "well written", scalar quality;
+- (T3) named writing-fault codes;
+- (T4) polish direction — does an edit move the judgment in one direction?
+
+Two framing manipulations ran throughout: where criteria live (state vs question vs absent) and how the property is named. Out of scope: mathematical writing, production detector claims, publication-grade benchmark claims. Vendor performance claims are reported, not re-verified (workspace R5 discipline).
 
 ## 2. The two axes
 
-Every phase separates a **machine-ness axis** (origin questions, machine-tell codes) from a **style/quality axis** (slop, faults, polish). They dissociate: machine-tell codes track origin at ρ ≈ 0.87–0.97, while a style-fault composite tracks origin at ρ ≈ 0.21. The shipped detector uses the machine-ness axis only; the style axis was measured to be unreliable for judging human vs machine polish (see §8).
+Every phase separates a **machine-ness axis** (origin questions, machine-tell codes) from a **style/quality axis** (slop, faults, polish). They dissociate: machine-tell codes track origin at ρ ≈ 0.87–0.97, while a style-fault composite tracks origin at ρ ≈ 0.21. The shipped detector uses the machine-ness axis only. The style axis is unreliable for judging human vs machine polish (see §8).
 
 ## 3. Corpora
 
@@ -18,7 +25,7 @@ Roles, licenses and links are in the README provenance table. In one line each: 
 
 ## 4. Instruments
 
-**Question bank.** 38–51 questions per request across the phases, built from three primitives: `noul` (probability a statement is true), `choice` (one of a closed option set with full probabilities), `score` (ordered levels). Named codes were aggregated in code, never by the model. All questions in one request are evaluated in parallel and in isolation — which was itself tested (isolation probe, §5).
+**Question bank.** 38–51 questions per request across the phases, built from three primitives: `noul` (probability a statement is true), `choice` (one of a closed option set with full probabilities), `score` (ordered levels). Named codes were aggregated in code, never by the model. All questions in one request are evaluated in parallel and in isolation. This behavior was tested with the isolation probe (§5).
 
 **The frozen origin question** (verbatim, identical in every stored call; do not switch to a 2-way variant):
 
@@ -30,17 +37,17 @@ Roles, licenses and links are in the README provenance table. In one line each: 
                "edited": "Written by a human, then substantially edited by an AI system"}}}
 ```
 
-The `edited` option is retained for comparability but fires ~never (0.03 on an AI-edited ground-truth corpus) and maps to `machine` at decision time. A `machine_like` noul is requested as a cross-check signal; it is not a decision input.
+The `edited` option is retained for comparability, but it is almost never chosen (0.03 on an AI-edited ground-truth corpus) and maps to `machine` at decision time. A `machine_like` noul is requested as a cross-check signal. It is not a decision input.
 
 **Comparative instruments.** Side-by-side choices ("Which text is better written?", "sloppier?", "sounds more human?") with both orders, plus an identical-copy control, a rubric-comparative phrasing, and candidate ranking experiments.
 
-**The frozen decision rule** (see `frozen_metric.json`): label set `{human, machine, abstain}`; `machine_signal = origin_choice ∈ {ai, edited}`; confidence gate `origin_choice.confidence ≥ θ`; EditLens-llama cross-check at cut 0.5; disagreement → abstain; below gate → abstain. θ = 0.31 was computed once as the 10th percentile of stored confidences (n = 2,054; ≈90% coverage) and frozen **before** the Tier-1 mass test, making Tier-1 an out-of-sample test of a fixed instrument.
+**The frozen decision rule** (see `frozen_metric.json`). The label set is `{human, machine, abstain}`. A machine signal is an `origin_choice` of `ai` or `edited`. The gate passes when `origin_choice.confidence ≥ θ`. EditLens-llama is the cross-check at cut 0.5. On disagreement the output is abstain. Below the gate the output is abstain. θ = 0.31 is the 10th percentile of stored confidences (n = 2,054, coverage ≈90%). It was frozen **before** the Tier-1 mass test, so Tier-1 is an out-of-sample test of a fixed instrument.
 
 ## 5. Controls and guards
 
-- **Isolation probe**: a duplicate question in every batch; mean |Δ| between duplicates equals the API re-run noise floor (≈0.01), so questions do not leak into each other.
-- **Noise floor**: verbatim re-runs measured at ≈0.01 (noul), ≈0.03 (score), choice agreement 0.978–0.99; per-question ICC 0.998 over 1,000 duplicated items. Effects below ~0.05 are treated as noise; 5% verbatim re-run controls are embedded in every batch.
-- **Order and copy controls**: both orders for every comparative; identical-copy pairs return `tie` 600/600 times, so `tie`-avoidance is not a confound.
+- **Isolation probe**: a duplicate question in every batch. The mean |Δ| between duplicates equals the API re-run noise floor (≈0.01), so questions do not leak into each other.
+- **Noise floor**: verbatim re-runs measured at ≈0.01 (noul), ≈0.03 (score), choice agreement 0.978–0.99. Per-question ICC is 0.998 over 1,000 duplicated items. Effects below ~0.05 are treated as noise. Every batch embeds 5% verbatim re-run controls.
+- **Order and copy controls**: both orders for every comparative. Identical-copy pairs return `tie` 600/600 times, so `tie`-avoidance is not a confound.
 - **Length/format controls**: padded-instruction control (proved the question-embedded "criteria effect" on the score axis is a format artifact), length correlations reported per corpus.
 - **Priming controls**: criteria-in-state vs criteria-in-question vs none, plus neutral and faults+virtues blocks.
 - **Accountability**: model pinned and echoed per response; provider recorded; vendor claims marked reported-not-verified.
@@ -53,9 +60,9 @@ The `edited` option is retained for comparability but fires ~never (0.03 on an A
 
 **P3 — comparative, criteria location, external validity (1,074 requests).** The inversion survives pairwise comparison (85.5% arjun, 93.3% LAMP), so it is not a scale-use artifact. Criteria in questions halves the priming but does not remove it. External corpora: origin 86.7% on IDMGSP (Galactica 40% — blind spot), 90% on HC3 (human FPR 23%). Selective prediction: origin gate reaches 90% coverage at 99.6% accuracy, while quality-comparison confidence is inversely informative where the bias is systematic.
 
-**P4 — mechanism and mitigations (~10k requests, arms A–F).** A: verbatim fault taxonomies (LAMP-7, Shaib-10, Wikipedia-10, ConsumerDividends-10) do **not** track expert edits (difference-in-differences ≈ 0) and often invert on human-vs-machine pairs; style and origin are cleanly separated. B: preference on human-vs-machine pairs is fully steerable by rubric wording (14.5% → 96–98.5%), but expert-edit-vs-machine stays at 12–16% under every framing; the padded-instruction control showed the score-side criteria effect is a format/length artifact. B8 candidate ranking: the expert edit was best-written 2/100 and *sloppiest* 81/100. D: Galactica confirmed as a Jev blind spot (0.36 ai-rate vs 0.97–1.00 for other generators); HC3 human FPR 21%; no monotone generation gradient; explicit humanization crashes slop questions (0.66 → 0.05) while origin is untouched (0.99 → 1.00). E: alias ≡ pinned model; cross-day stability at the noise floor; ICC 0.998. F: decision memo recommending origin detection + confidence gate, and forbidding quality/slop as reward.
+**P4 — mechanism and mitigations (~10k requests, arms A–F).** A: verbatim fault taxonomies (LAMP-7, Shaib-10, Wikipedia-10, ConsumerDividends-10) do **not** track expert edits (difference-in-differences ≈ 0) and often invert on human-vs-machine pairs. Style and origin are cleanly separated. B: preference on human-vs-machine pairs is fully steerable by rubric wording (14.5% → 96–98.5%). Expert-edit-vs-machine stays at 12–16% under every framing. The padded-instruction control showed the score-side criteria effect is a format/length artifact. B8 candidate ranking: the expert edit was best-written 2/100 and *sloppiest* 81/100. D: Galactica is a confirmed Jev blind spot (0.36 ai-rate vs 0.97–1.00 for other generators). HC3 human FPR is 21%. There is no monotone generation gradient. Explicit humanization crashes slop questions (0.66 → 0.05), while origin is untouched (0.99 → 1.00). E: the alias equals the pinned model, cross-day stability is at the noise floor, and ICC is 0.998. F: a decision memo recommends origin detection with a confidence gate, and forbids quality/slop as reward.
 
-**P5 — external judge and reward model.** EditLens (roberta-large + Llama-3.2-3B) scored 10,080 texts; on LAMP it sides with the human raters against Jev (ρ ≈ +0.29/+0.31 with human deltas vs −0.23/−0.32 against Jev's quality delta); human FPR 0.00 on non-fiction; Galactica shared-failure; Jev uniquely covers GPT-2/GPT-3/SCIgen where EditLens fails. A small trained cross-encoder (T2) reached the best expert-preference correlation (ρ ≈ 0.36 out-of-sample) but, tested on 3,000 held-out pairs, **reproduced the register bias out of corpus** (Spearman −0.85 against an independent edit proxy; length ruled out): the bias is learned from "improvement" training targets, so no polishing loop was built.
+**P5 — external judge and reward model.** EditLens (roberta-large + Llama-3.2-3B) scored 10,080 texts. On LAMP it sides with the human raters against Jev (ρ ≈ +0.29/+0.31 with human deltas, vs −0.23/−0.32 against Jev's quality delta). Its human FPR is 0.00 on non-fiction. Galactica is a shared failure. Jev uniquely covers GPT-2/GPT-3/SCIgen where EditLens fails. A small trained cross-encoder (T2) reached the best expert-preference correlation (ρ ≈ 0.36 out-of-sample). But on 3,000 held-out pairs it **reproduced the register bias** (Spearman −0.85 against an independent edit proxy, length ruled out). The bias is learned from "improvement" training targets, so no polishing loop was built.
 
 **P6 — mass test, baselines, shipping (6,067 + ~10k requests).** The frozen detector was run over every remaining bundle text (coverage 8,890/8,890; est. $0.183) and scored against five hypotheses frozen in advance (M1–M5, §7). Zero-shot baselines (Binoculars, log-likelihood, rank, entropy, Fast-DetectGPT) failed to rescue the creative-fiction failure; the gated ensemble beat both singles; the `origin_triage.py` CLI was built to the pre-registered gate decision (EditLens-llama primary, Jev advisory), with `--self-test` as a regression check. A cross-gateway check (OpenCode Zen vs direct TypeSafe) passed all bars (choice agreement 0.987).
 
@@ -71,16 +78,16 @@ The `edited` option is retained for comparability but fires ~never (0.03 on an A
 
 ## 8. Threats to validity
 
-- **Creative register**: both shipped signals saturate on literary prose; the correct behaviour there is abstain, and the CLI can only advise, not detect.
-- **Register bias is learned, not interface-specific**: a text-only trained reward model reproduced it on held-out data, so it should be expected in any preference-trained evaluator in this family.
+- **Creative register**: both shipped signals answer "machine" for literary prose. The correct behavior there is abstain, and the CLI can only advise, not detect.
+- **Register bias is learned, not interface-specific**: a text-only trained reward model reproduced it on held-out data. The same bias can appear in any preference-trained evaluator in this family.
 - **Evadable slop questions**: explicit humanization removes the slop signal while leaving origin detection intact — do not ship slop as a standalone filter.
-- **Single vendor, pinned version**: all numbers are `jev-1.13.0` (plus a gateway-equivalent check); the stochastic API is characterised by measured noise floors, and fine-grained comparisons (<0.05) require paired designs and repeats.
-- **Third-party instruments**: EditLens truncates at 512/1024 tokens; zero-shot baseline thresholds come from the published recipes; corpus licenses vary (see README) and no corpus text is redistributed here.
+- **Single vendor, pinned version**: all numbers are `jev-1.13.0` (plus a gateway-equivalence check). The stochastic API is characterized by measured noise floors. Fine-grained comparisons (<0.05) require paired designs and repeats.
+- **Third-party instruments**: EditLens truncates at 512/1024 tokens. Zero-shot baseline thresholds come from the published recipes. Corpus licenses vary (see README), and no corpus text is redistributed here.
 
 ## 9. Reproduction map
 
 | Entry point | What it does |
 |---|---|
-| `./origin_triage.py --self-test` | Replays the frozen rule over `data/selftest_cache.jsonl`; expects emitted 6,492, accuracy 0.7751, 3,501 creative-prose advisories; exit non-zero on mismatch |
-| `python3 scripts/reproduce_tier1.py --check` | Recomputes the published summary and M1–M5 verdicts from the cache and checks them field-for-field against `data/*.json`; exit non-zero on any mismatch |
-| `python3 scripts/build_selftest_cache.py` | Lab-side only: rebuilds the cache from the source archive (requires the full corpus and `prep_tier1.py`; not runnable from this repository) |
+| `./origin_triage.py --self-test` | Replays the frozen rule over `data/selftest_cache.jsonl`. Expects emitted 6,492, accuracy 0.7751, 3,501 creative-prose advisories. Exits non-zero on mismatch |
+| `python3 scripts/reproduce_tier1.py --check` | Recomputes the published summary and M1–M5 verdicts from the cache and checks them field-for-field against `data/*.json`. Exits non-zero on any mismatch |
+| `python3 scripts/build_selftest_cache.py` | Lab-side only: rebuilds the cache from the source archive (requires the full corpus and `prep_tier1.py`, and is not runnable from this repository) |

@@ -2,9 +2,20 @@
 
 *(Answer: Depends on what "slop" means. For AI-generated text, Jev is accurate on non-fiction and fails on creative prose. For writing quality, the answer is no: the scores reward machine style, not writing quality, and a rewrite can erase the slop score.)*
 
-What we did: over three days (2026-09-22 → 24), TypeSafe's System One model (Jev, `jev-1.13.0`) received ≈20k requests measuring four things — origin (human / AI / AI-edited), "slop" and writing quality, named writing faults, and whether edits move its judgments monotonically — with every judged property stated explicitly in the request. The batteries ran on paired corpora with known provenance: human Reddit posts vs LLM paraphrases, LLM drafts vs professional rewrites (LAMP), machine edits (SlopToPolish), human vs ChatGPT answers (HC3), scientific abstracts from five generators (IDMGSP), and a graded AI-edit corpus (EditLens). Comparative arms ran in both orders; every batch carried verbatim re-run and noise-floor controls.
+What we did: over three days (2026-09-22 → 24), TypeSafe's System One model (Jev, `jev-1.13.0`) received ≈20k requests. The requests measured four things: origin (human / AI / AI-edited), "slop" and writing quality, named writing faults, and whether edits move a judgment in one direction. Every judged property was stated in the request.
 
-What makes it a measurement rather than a demo: paired corpora with known ground truth, both option orders, verbatim re-run controls against a measured noise floor, external judges (EditLens and five zero-shot baselines) on the same texts, and a detector rule pre-registered and frozen before the 8,890-text mass test, so the final numbers are out-of-sample. The design keeps two axes separate throughout — machine-ness and style/quality — because the evidence turns on the difference.
+The batteries ran on paired corpora with known provenance:
+
+- Human Reddit posts vs LLM paraphrases (arjun).
+- LLM drafts vs professional rewrites (LAMP).
+- Machine edits (SlopToPolish).
+- Human vs ChatGPT answers (HC3).
+- Scientific abstracts from five generators (IDMGSP).
+- A graded AI-edit corpus (EditLens).
+
+Comparative arms ran in both orders. Every batch carried verbatim re-run and noise-floor controls.
+
+The design makes the numbers trustworthy. It uses paired corpora with known ground truth, both option orders, and verbatim re-run controls against a measured noise floor. External judges (EditLens and five zero-shot baselines) scored the same texts. The detector rule was frozen before the 8,890-text mass test, so the final numbers are out-of-sample. The design keeps two axes separate: machine-ness and style/quality. The results depend on the difference.
 
 ## origin-triage
 
@@ -14,7 +25,7 @@ This repository ships **code plus derived, hash-keyed data only** — no third-p
 
 ## Results summary
 
-**Tier-1 mass test** (8,890 distinct texts, 8,511 labeled; one frozen rule applied to stored responses; the rule and thresholds were frozen before the test):
+**Tier-1 mass test.** 8,890 distinct texts, 8,511 labeled. The rule and its thresholds were frozen before the test, then applied to stored responses.
 
 | system                                                      | emitted accuracy | coverage               |
 | ----------------------------------------------------------- | ---------------- | ---------------------- |
@@ -22,23 +33,23 @@ This repository ships **code plus derived, hash-keyed data only** — no third-p
 | Jev `origin_choice` alone                                   | 0.723            | 1.000                  |
 | EditLens-llama alone                                        | 0.705            | 1.000                  |
 
-Pooled AUC: EditLens-llama 0.821, Jev 0.782 (Jev's ranking score is P(ai) + P(edited); the two signals agree on 80.2%). On non-fiction alone the ordering holds (≈0.96 vs ≈0.87). The ensemble beats the best single signal by +5.2pp; texts not emitted abstain — 1,374 on gated signal disagreement plus 645 below the confidence gate.
+Pooled AUC: EditLens-llama 0.821, Jev 0.782. Jev's ranking score is P(ai) + P(edited). The two signals agree on 80.2%. On non-fiction alone the ordering holds (≈0.96 vs ≈0.87). The ensemble beats the best single signal by +5.2pp. Texts not emitted abstain: 1,374 because the two signals disagreed, plus 645 below the confidence gate.
 
-**Where it works — non-fiction.** Human false-positive rate 0.02–0.25 and machine detection 0.80–1.00 on generated text (AI-*edited* text is deliberately harder: 0.47–0.75): Reddit-pair human side 0.024, arXiv abstracts 0.112, Grammarly source text 0.140, EditLens-val human writing 0.205, casual Q&A (HC3) 0.245. Machine text: LLM drafts 0.96–0.98, GPT-2/SCIgen/ChatGPT abstracts 1.000/1.000/0.993, ChatGPT-adjacent Q&A 1.00.
+**Where it works — non-fiction.** Human false-positive rate 0.02–0.25 and machine detection 0.80–1.00 on generated text (AI-*edited* text is a separate, harder category: 0.47–0.75): Reddit-pair human side 0.024, arXiv abstracts 0.112, Grammarly source text 0.140, EditLens-val human writing 0.205, casual Q&A (HC3) 0.245. Machine text: LLM drafts 0.96–0.98, GPT-2/SCIgen/ChatGPT abstracts 1.000/1.000/0.993, ChatGPT-adjacent Q&A 1.00.
 
-**Where it fails — human creative fiction.** Human-written creative prose is labeled machine-generated **92–97%** of the time: professional rewrites of LLM drafts 0.923, expert rewrites 0.930, untouched amateur paragraphs 0.970 — while the LLM drafts get the same treatment. EditLens-llama fails identically on those strata (accuracy 0.00–0.12), so this is a genre-level limit shared by the detector family, not a fixable Jev defect. The CLI emits an advisory (`creative_prose_risk_both_signals_saturated`) when both signals saturate; it cannot rescue the label.
+**Where it fails — human creative fiction.** Jev labels human-written creative prose machine-generated **92–97%** of the time: professional rewrites of LLM drafts 0.923, expert rewrites 0.930, untouched amateur paragraphs 0.970. The LLM drafts receive the same label. EditLens-llama fails identically on those strata (accuracy 0.00–0.12). The limit is shared by the whole detector family, and it is not a fixable Jev defect. The CLI emits an advisory (`creative_prose_risk_both_signals_saturated`) when both signals answer "machine". The advisory cannot change the label.
 
 **Complementary blind spots.** Galactica-class scientific LMs evade Jev (0.37 ai-rate vs 0.97–1.00 for other generators) and EditLens entirely (0.00), while Jev uniquely catches GPT-2/GPT-3/SCIgen abstracts (0.97–1.00) that EditLens misses (0.00–0.27 accuracy). The two signals are kept together for exactly this reason.
 
-**Reliability.** Per-question ICC 0.998 (1,000 duplicated items); noise floor ≈0.01 for noul, ≈0.03 for score, choice agreement 0.978–0.99 across re-runs; the model alias resolves to the same pinned build; cross-gateway agreement 0.987 (accuracy delta −0.7pp, OpenCode Zen vs the direct TypeSafe API).
+**Reliability.** Per-question ICC 0.998 (1,000 duplicated items). The noise floor is ≈0.01 for noul and ≈0.03 for score, with choice agreement 0.978–0.99 across re-runs. The model alias resolves to the same pinned build. Cross-gateway agreement is 0.987 (accuracy delta −0.7pp, OpenCode Zen vs the direct TypeSafe API).
 
-**The register-bias negative result (why no polishing tool ships here).** Jev rates the LLM-polished text above the human text on the style axis, while independent judges agree with the humans: quality preference for the machine side 84.5% (scalar) / 85.5% (pairwise) on paraphrase pairs, and 90.7% / 93.3% against expert edits; in a 5-candidate ranking the expert edit was named best-written 2/100 times and *sloppiest* 81/100. A cross-encoder reward model trained on "improvement" preferences reproduces the bias out of corpus (Spearman −0.85 vs an independent edit proxy; length ruled out), so the bias is learned from the training target rather than an artifact of the scoring interface. Slop-style questions are also evadable by explicit humanization (0.66 → 0.05) while origin detection holds (0.99 → 1.00) — hence the detector uses the origin axis only.
+**The register-bias negative result (why no polishing tool ships here).** Jev rates the LLM-polished text above the human text on the style axis. Independent judges agree with the humans. Jev's quality score prefers the machine side 84.5% (scalar) / 85.5% (pairwise) on paraphrase pairs, and 90.7% / 93.3% against expert edits. In a 5-candidate ranking the expert edit was named best-written 2/100 times and *sloppiest* 81/100. A cross-encoder reward model trained on "improvement" preferences reproduces the bias on held-out pairs (Spearman −0.85 against an independent edit proxy, with length ruled out). The bias is learned from the training target, not from the scoring interface. Explicit humanization also removes the slop signal (0.66 → 0.05), while origin detection holds (0.99 → 1.00). The detector therefore uses the origin axis only.
 
 **Pre-registered verdicts (M1–M5).** M1 scale invariance INCONCLUSIVE (6/7 strata within ±5pp of prior estimates), M2 domain robustness NEGATIVE (creative-fiction FPR), M3 ensemble value POSITIVE (+5.2pp), M4 within-document pairing NEGATIVE (within 0.60 vs cross 0.81), M5 humanization robustness INCONCLUSIVE (200 paired humanizations, machine call kept 0.93).
 
 ## Provenance
 
-Every source below fed measured experiments in the study; none of it is redistributed here. `data/selftest_cache.jsonl` contains only content hashes, stratum labels, numeric scores and selected model answers (8,890 texts drawn from these corpora). Row counts are dataset scale — individual arms scored stratified slices (often 150 texts per class), not every row.
+Every source below fed measured experiments in the study. This repository redistributes none of them. `data/selftest_cache.jsonl` contains only content hashes, stratum labels, numeric scores and selected model answers (8,890 texts drawn from these corpora). Row counts describe the whole dataset. Individual arms scored stratified slices (often 150 texts per class), not every row.
 
 ### Datasets
 
@@ -64,7 +75,7 @@ Every source below fed measured experiments in the study; none of it is redistri
 | `pangram/editlens_roberta-large`, `pangram/editlens_Llama-3.2-3B` | EditLens signals — primary where available, roberta companion                             | <https://huggingface.co/pangram>                              | CC BY-NC-SA 4.0 (noncommercial)          |
 | `tiiuae/falcon-7b` (+ `-instruct`)                                | Zero-shot detection baselines (Binoculars, log-likelihood, rank, entropy, Fast-DetectGPT) | <https://huggingface.co/tiiuae/falcon-7b>                     | Apache-2.0                               |
 
-The TypeSafe System One API and its docs are at <https://docs.typesafe.ai/>; the model version used throughout is `jev-1.13.0` and vendor performance claims are reported, not re-verified here.
+The TypeSafe System One API and its docs are at <https://docs.typesafe.ai/>. The model version used throughout is `jev-1.13.0`. Vendor performance claims are reported, not re-verified here.
 
 ## Quickstart
 
@@ -90,7 +101,7 @@ Labels: `human`, `machine`, `abstain`. `abstain` is an honest outcome (below the
 
 ## Scope and limitations
 
-The measured recipe is valid for **non-fiction** (posts, Q&A, abstracts, reviews, web edits). On human creative/literary prose the correct output is *abstain*, and neither shipped signal can tell — both saturate on "machine". This is documented, measured, and surfaced as an advisory; it is not a threshold problem. Galactica-class scientific LMs are a shared blind spot of Jev and EditLens. The detector is a single-vendor API client; the frozen numbers were measured on `jev-1.13.0` only, with the model pinned and every batch carrying verbatim re-run controls.
+The measured recipe is valid for **non-fiction** (posts, Q&A, abstracts, reviews, web edits). On human creative prose the correct output is *abstain*. Neither signal can separate the two cases, because both call the human text "machine". This is documented, measured, and surfaced as an advisory. It is not a threshold problem. Galactica-class scientific LMs are a shared blind spot of Jev and EditLens. The detector uses one vendor's API. The frozen numbers were measured on `jev-1.13.0` only, with the model pinned and verbatim re-run controls in every batch.
 
 ## Layout
 
